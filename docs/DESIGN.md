@@ -132,7 +132,6 @@ token 估算：DeepSeek 官方给的经验值——1 个中文字符约 0.6 toke
 ### 拼好的起始上下文长什么样
 
 ```markdown
-<!-- 由「上下文拼图台」拼装：4 块，约 1,180 tokens（估算） -->
 # 起始上下文
 
 ## 约定 · 来自 api / AGENTS.md › 部署
@@ -142,7 +141,8 @@ token 估算：DeepSeek 官方给的经验值——1 个中文字符约 0.6 toke
 - @[修登录 bug](dsh-session:Ij...In0)
 
 ## 会话摘录 · 修登录 bug（2026-10-02）
-> 原因是 cookie 的 SameSite……
+**助手：**
+原因是 cookie 的 SameSite……
 
 ## 相关文件
 - @src/auth/login.ts
@@ -152,6 +152,8 @@ token 估算：DeepSeek 官方给的经验值——1 个中文字符约 0.6 toke
 ```
 
 会话引用用 DSH 原生的 `dsh-session:` 提及，发送后由 `dsh-session-reference` 展开为有界只读快照；文件用 `@path` 提及，模型需要时自己读。
+
+两处刻意的取舍（来自实测）：不加 HTML 注释头（它会原样出现在对话气泡里，块数和 token 只在拼图台界面显示）；摘录不用 `>` 引用（DSH 输入框会把引用块折叠成引用卡片，并吞掉紧跟的分隔线）。
 
 ## 7. 明确不做
 
@@ -188,7 +190,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 
 ## 9. 实测记录（v0.1，2026-11-11）
 
-环境：桌面版 DSH `0.2.2-rc.1` 自带运行时；网页版 profile；隔离的 `DSH_HOME`（放在临时目录）；端口 4001；**没有配置 API key**。
+环境：桌面版 DSH `0.2.2-rc.1` 自带运行时；网页版 profile；隔离的 `DSH_HOME`（放在临时目录）；端口 4001。第 1–10 步在没有 API key 的情况下完成；第 11–13 步用的是用户自己在隔离 DSH 里填的 key（模型 DeepSeek-V4.1-Flash），插件本身从不读取或填写 key。
 安装：`dsh plugin --profile web add <插件目录>`，然后重启。演示用两个 git 项目：`shop-web` 和 `shop-api`。
 
 | # | 步骤 | 结果 |
@@ -201,8 +203,11 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 | 6 | 写入指令 → shop-web / `AGENTS.local.md` | ✅ 新建了文件，内容用 `context-studio:begin/end` 标记包起来并写明 `from="shop-api"`；回到 shop-web，能看到这一块带「拼入」标签 |
 | 7 | ▶ 用它开新会话 | ✅ 打开 shop-web 的空白会话，输入框里填好了拼好的起始上下文，**没有发送** |
 | 8 | 归档会话 → 撤销（通过接口） | ✅ `workspace.json` 的 `archivedSessionIds` 先加上这个会话，撤销后又移除 |
-| 9 | 会话摘录 | ✅ 接口能用；演示会话没发过消息，返回空列表（没有 API key，所以没有对话内容） |
+| 9 | 会话摘录（无 key 时） | ✅ 接口能用；演示会话没发过消息，返回空列表 |
 | 10 | 跨站请求（带 `Origin: http://evil.com`） | ✅ 返回 403 `cross-origin` |
+| 11 | 用拼盘在 shop-api 开会话并发送「只根据工作区指令说明部署和数据库约定」 | ✅ 模型准确复述了 shop-api 的 `AGENTS.md`，说明指令确实进入了上下文；会话自动命名为「项目部署与数据库约定」 |
+| 12 | 在拼图台里看这个会话的摘录 | ✅ 修复后只列出用户发的那条和助手的回答（修复前还混进了运行时注入的「Current runtime context…」「Time sampled…」两条，见下） |
+| 13 | 把这个会话的 `@会话` 引用 + 助手回答摘录拼进拼盘，目标 shop-web，任务「只根据上面的参考会话回答：shop-api 周五可以发版吗？」，开新会话并发送 | ✅ DSH 把提及渲染成会话芯片，消息下方显示「引用会话 · 项目部署与数据库约定」；模型回答「不可以……周五不发版」 |
 
 实测中发现并修复的问题：
 
@@ -210,10 +215,11 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 - 全局文件原来显示成很长的绝对路径，现在显示为 `$DSH_HOME/AGENTS.md`；「重复」标记也改成指向这个短名。
 - 拼入的块原来直接显示 HTML 注释标记，现在只显示正文，并加上「拼入 · 来自 X · 日期」标签。
 - 操作记录里的「写入」原来显示绝对路径，现在显示「项目名/文件名（来自 X）」。
+- **会话摘录混进了运行时注入的消息。** `user/message` 事件不只有用户亲手发的，还有运行时注入的上下文快照、时间等，它们不带 `<system-reminder>` 外壳。现在通过 `sessionQuery.readSession()` 读到每条消息的 `source.kind`，只保留 `kind === 'user'` 的（来源：`dsh-llm` 的 `MessageSourceMap`、session-controller 的 `'user-rpc'`）；读不到时退回旧规则。
+- **起始上下文的 HTML 注释头出现在对话气泡里，`>` 引用的摘录被折叠。** 现在去掉注释头，摘录改成「**助手：**」加正文。
 
 已知限制：
 
 - 网页版里点「添加工作区」会在宿主机上弹出原生文件夹选择框。实测时没有通过它添加工作区，而是在 DSH 停止时直接往隔离目录的 `storages/workspace.json` 里写入了两个工作区记录。这是实测环境的准备步骤，和插件无关。
-- 会话摘录需要会话里真的有对话。本次没有 API key，只用单元测试和假的 `sessionQuery` 覆盖了这部分（会过滤掉 `<system-reminder>` 注入的消息和空消息）。
 
-单元测试：`npm test`，41 个用例全部通过。覆盖拆块、删块、追加、token 估算、扫描与体检、会话、备份与撤销、冲突检测、并发串行、日志损坏恢复、拼盘渲染、请求校验，以及一次挂到真实 HTTP 服务上的端到端流程。
+单元测试：`npm test`，42 个用例全部通过。覆盖拆块、删块、追加、token 估算、扫描与体检、会话、备份与撤销、冲突检测、并发串行、日志损坏恢复、拼盘渲染、请求校验，以及一次挂到真实 HTTP 服务上的端到端流程。

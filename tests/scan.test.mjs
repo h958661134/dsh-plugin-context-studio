@@ -136,3 +136,29 @@ test('重复标记用短名指向全局文件', async () => {
   assert.ok(flag.text.includes('$DSH_HOME/AGENTS.md'), flag.text)
   assert.ok(flag.text.includes('CLAUDE.md'), '同目录的 CLAUDE.md 也算重复')
 })
+
+test('sessionSnippets: 有 readSession 时按 source.kind 只留用户亲手发的消息', async () => {
+  const now = Date.now()
+  const q = {
+    async filterEvents() {
+      return [
+        { seq: 1, type: 'user/message', time: now, text: '帮我修登录' },
+        { seq: 2, type: 'user/message', time: now, text: 'Current runtime context. This snapshot supersedes…' },
+        { seq: 3, type: 'user/message', time: now, text: 'Time sampled while preparing turn 1' },
+        { seq: 4, type: 'assistant/message', time: now, text: '好的' },
+      ]
+    },
+    async readSession() {
+      return { events: [
+        { seq: 1, type: 'user/message', data: { source: { kind: 'user', rpcId: 'r1' } } },
+        { seq: 2, type: 'user/message', data: { source: { kind: 'runtime-context', form: 'snapshot' } } },
+        { seq: 3, type: 'user/message', data: { source: { kind: 'time-context' } } },
+      ] }
+    },
+  }
+  const list = await sessionSnippets(q, 's')
+  assert.deepEqual(list.map(s => s.seq), [1, 4])
+  // readSession 失败时退回到旧规则
+  q.readSession = async () => { throw new Error('boom') }
+  assert.equal((await sessionSnippets(q, 's')).length, 4)
+})

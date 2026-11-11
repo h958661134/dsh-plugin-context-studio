@@ -15,11 +15,12 @@ const items = [
 
 test('compose(prompt): 同源相邻块合并、会话用提及、文件用 @path、带任务', () => {
   const r = compose(sanitizeItems(items), { task: '给登录页加记住我' })
-  assert.match(r.text, /^<!-- 由「上下文拼图台」拼装：8 块，约 \d+ tokens（估算） -->\n# 起始上下文/)
+  assert.match(r.text, /^# 起始上下文\n/, '不带 HTML 注释头（它会原样出现在对话气泡里）')
   assert.ok(r.text.includes('## 约定 · 来自 api / AGENTS.md › 构建\n\n- 用 pnpm\n- 产物在 dist/'))
   assert.equal(r.text.match(/## 约定/g).length, 1)
   assert.ok(r.text.includes('## 参考会话\n\n- @[修登录](dsh-session:Ilx4Ig)'))
-  assert.ok(r.text.includes('## 会话摘录 · 修登录（2026-10-02）\n\n> **助手：** 原因是 cookie\n> 第二行'))
+  assert.ok(r.text.includes('## 会话摘录 · 修登录（2026-10-02）\n\n**助手：**\n原因是 cookie\n第二行'))
+  assert.ok(!/^>/m.test(r.text), '不用 > 引用，免得被 DSH 输入框折叠')
   assert.ok(r.text.includes('## 相关文件\n\n- @src/auth/login.ts\n- @"docs/my file.md"'))
   assert.ok(r.text.includes('## 可用技能\n\n- 技能 `deploy`：部署'))
   assert.ok(r.text.trimEnd().endsWith('---\n\n给登录页加记住我'))
@@ -45,7 +46,7 @@ test('compose: 预算与超出位置', () => {
   assert.equal(ok.over, false)
   assert.equal(ok.overFrom, -1)
   const empty = compose([], {})
-  assert.match(empty.text, /0 块/)
+  assert.equal(empty.count, 0)
 })
 
 test('sanitizeItems: 拒绝坏输入、截断超长', () => {

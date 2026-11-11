@@ -7,7 +7,7 @@
 [![version](https://img.shields.io/badge/version-0.1.0-4f6bed)](CHANGELOG.md)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.0%20%3C0.3.0-1f2937)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)](https://nodejs.org)
-[![tests](https://img.shields.io/badge/tests-41%20passing-22c55e)](tests)
+[![tests](https://img.shields.io/badge/tests-42%20passing-22c55e)](tests)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 <img src="docs/images/studio.png" alt="上下文拼图台：左边是项目列表和操作记录，中间是当前项目的素材墙（每块指令都有来源、新旧、token 和体检标记），右边是拼盘、token 预算和拼好的起始上下文预览" width="100%">
@@ -119,6 +119,10 @@ dsh plugin --profile web add ./dsh-plugin-context-studio
 
 3. **复制**：复制到剪贴板，你自己去用。
 
+拼盘里的 `@会话` 是 DSH 原生的会话引用。发送后，DSH 会把它渲染成会话芯片，并把那个会话的有界快照一起交给模型。下面这个例子：在 shop-web 里问「shop-api 周五可以发版吗」，模型根据引用的 shop-api 会话回答「不可以」。
+
+<img src="docs/images/session-reference.png" alt="shop-web 的会话：用户消息里有会话引用芯片和一段助手摘录，下方注明「引用会话 · 项目部署与数据库约定」，模型回答周五不发版" width="100%">
+
 素材卡上的 **拼到…** 按钮可以把单块素材直接写进另一个项目，不用经过拼盘。
 
 ## 安全模型
@@ -174,7 +178,7 @@ DSH 本身没有叫 memory 的存储。真正会进入模型上下文、相当�
 是估算值，按 DeepSeek 官方的经验值算：中文约 0.6 token/字，英文约 0.3 token/字符。用来比较多少、看预算够不够足够了。
 
 **会话为什么不能直接拼「全文」？**
-拼盘里的 `@会话` 用的是 DSH 原生的会话引用，发送后由 `dsh-session-reference` 展开成有界快照，不会一下子塞满上下文。要精确挑内容，点会话卡上的「摘录」，勾选具体的几条消息。
+拼盘里的 `@会话` 用的是 DSH 原生的会话引用，发送后由 `dsh-session-reference` 展开成有界快照，不会一下子塞满上下文。要精确挑内容，点会话卡上的「摘录」，勾选具体的几条消息。摘录只列出你亲手发的消息和助手的回答，运行时注入的指令、时间、环境快照不会出现在里面。
 
 ## 工作原理
 
@@ -212,7 +216,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 ## 参与开发
 
 ```bash
-npm test          # node:test，41 个用例，不依赖 DSH
+npm test          # node:test，42 个用例，不依赖 DSH
 ```
 
 - 纯 JavaScript ESM，加 `// @ts-check`。运行时不依赖任何 `@deepseek-ai/*` 包。
