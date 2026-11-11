@@ -4,7 +4,7 @@
 
 **看见每个项目里会进入模型上下文的东西：清掉过时的，把别的项目里有用的拼过来，再拼成一份起始上下文去开新会话。**
 
-[![version](https://img.shields.io/badge/version-0.1.0-4f6bed)](CHANGELOG.md)
+[![version](https://img.shields.io/github/v/release/h958661134/dsh-plugin-context-studio?label=version&color=4f6bed)](https://github.com/h958661134/dsh-plugin-context-studio/releases)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.0%20%3C0.3.0-1f2937)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)](https://nodejs.org)
 [![tests](https://img.shields.io/badge/tests-42%20passing-22c55e)](tests)
@@ -40,7 +40,7 @@
 
 ```bash
 # 1. 拿到插件
-git clone <本仓库地址> dsh-plugin-context-studio
+git clone https://github.com/h958661134/dsh-plugin-context-studio.git
 
 # 2. 装进 DSH 的 web profile（参数会转给 pnpm）
 dsh plugin --profile web add ./dsh-plugin-context-studio
@@ -203,7 +203,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 
 ## 路线图
 
-- [x] v0.1：素材墙、体检、移除 / 归档 / 撤销、拼盘、跨项目写入、预填草稿开新会话
+- [x] v1.0：素材墙、体检、移除 / 归档 / 撤销、拼盘、跨项目写入、预填草稿开新会话
 - [ ] 配方：把拼盘存成命名配方，按项目和任务类型一键复用
 - [ ] 技能移植：把技能目录复制到目标项目的 `.agents/skills`（不覆盖同名技能）
 - [ ] 语义体检：请模型判断某条约定和代码是否还一致（先征得你同意再花 token）
@@ -214,6 +214,8 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 完整设计见 [docs/DESIGN.md](docs/DESIGN.md)。
 
 ## 参与开发
+
+用起来哪里不顺手、想要什么功能，欢迎到 [Issues](https://github.com/h958661134/dsh-plugin-context-studio/issues) 里提。
 
 ```bash
 npm test          # node:test，42 个用例，不依赖 DSH

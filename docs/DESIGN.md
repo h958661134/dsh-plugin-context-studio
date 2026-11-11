@@ -1,6 +1,6 @@
 # 上下文拼图台 · Context Studio —— 设计文档
 
-> 状态：v0.1 已实现（见「v0.1 落地范围」与「实测记录」）。本文先写理想形态，再写这一版真正落地的部分。
+> 状态：v1.0 已实现（见「v1.0 落地范围」与「实测记录」）。本文先写理想形态，再写这一版真正落地的部分。
 > 所有 DSH 接口都已在源码（`fcc0ad46`，2026-11-04）和安装版运行时（desktop `0.2.2-rc.1`）里核对过，出处见第 3 节。
 
 ---
@@ -27,7 +27,7 @@
 
 DSH 本身**没有**名为 memory 的一等存储（全仓 `memories` / `MEMORY.md` 搜不到）。和「memory」对应的、真正会进入模型上下文的东西如下：
 
-| 素材 | 在哪 | 谁加载 / 怎么进上下文 | 源码出处 | v0.1 |
+| 素材 | 在哪 | 谁加载 / 怎么进上下文 | 源码出处 | v1.0 |
 |---|---|---|---|---|
 | **全局指令** | `$DSH_HOME/AGENTS.md`、`$DSH_AGENTS_HOME`（默认 `~/.agents`）`/AGENTS.md` | `dsh-agent-instructions` 首次请求时作为基线消息注入 | `packages/context/agent-instructions/README.zh.md`「agent 获得的内容」 | 看 / 移除 / 拼接 |
 | **项目指令** | 项目根（最近的含 `.git` 的祖先）到会话 cwd 每一级目录下的 `AGENTS.md`、`CLAUDE.md`、`AGENTS.local.md`、`CLAUDE.local.md` | 同上，从宽到窄 | 同上「配置」表 | 看 / 移除 / 拼接 / 写入 |
@@ -83,7 +83,7 @@ DSH 本身**没有**名为 memory 的一等存储（全仓 `memories` / `MEMORY.
 | 被遮蔽 | `CLAUDE.md` 和同目录 `AGENTS.md` 内容一致——DSH 只会加载一份 |
 | 超预算 | 整条指令链超过 `maxBytes`（默认 65536）会被 DSH 截断 |
 
-### 4.3 远景（不在 v0.1）
+### 4.3 远景（不在 v1.0）
 
 - **配方**：保存拼盘为命名配方，按项目/任务类型推荐。
 - **语义体检**：调用模型判断「这条约定和代码是否还一致」（需用户确认花 token）。
@@ -107,7 +107,7 @@ DSH 本身**没有**名为 memory 的一等存储（全仓 `memories` / `MEMORY.
 
 原子写：先写同目录临时文件再 `rename`，保留原换行风格（CRLF/LF）和末尾换行。
 
-## 6. v0.1 落地范围
+## 6. v1.0 落地范围
 
 | 能力 | 状态 |
 |---|---|
@@ -188,7 +188,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 数据：$DSH_HOME/context-studio/{journal.json, backups/}
 ```
 
-## 9. 实测记录（v0.1，2026-11-11）
+## 9. 实测记录（v1.0，2026-11-11）
 
 环境：桌面版 DSH `0.2.2-rc.1` 自带运行时；网页版 profile；隔离的 `DSH_HOME`（放在临时目录）；端口 4001。第 1–10 步在没有 API key 的情况下完成；第 11–13 步用的是用户自己在隔离 DSH 里填的 key（模型 DeepSeek-V4.1-Flash），插件本身从不读取或填写 key。
 安装：`dsh plugin --profile web add <插件目录>`，然后重启。演示用两个 git 项目：`shop-web` 和 `shop-api`。
