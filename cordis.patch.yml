@@ -1,0 +1,16 @@
+# dsh-plugin-context-studio bundle patch —— 新增一个全局行：上下文拼图台的 Host 侧接口。
+#
+# 浏览器端界面由 package.json 的 dsh.client 声明（lib/client.js），在左侧栏出现「拼图台」入口。
+#
+# 想调整配置（陈旧天数、数据目录等），在你自己 profile 的 cordis.patch.yml 里
+# 按 id `context-studio` 覆盖这一行即可，例如：
+#
+#   - replace:
+#       - id: context-studio
+#         name: dsh-plugin-context-studio
+#         config:
+#           staleDays: 60
+- insert:
+    - id: context-studio
+      name: dsh-plugin-context-studio
+      config: {}
