@@ -119,7 +119,7 @@ dsh plugin --profile web add ./dsh-plugin-context-studio
 
 3. **复制**：复制到剪贴板，你自己去用。
 
-拼盘里的 `@会话` 是 DSH 原生的会话引用。发送后，DSH 会把它渲染成会话芯片，并把那个会话的有界快照一起交给模型。下面这个例子：在 shop-web 里问「shop-api 周五可以发版吗」，模型根据引用的 shop-api 会话回答「不可以」。
+拼盘里的 `@会话` 是 DSH 原生的会话引用。发送后，DSH 会把它渲染成会话芯片，并把那个会话的有界快照一起交给模型。下面这个例子：在 shop-web 里问「shop-api 能在周五下午发生产版本吗」，模型根据引用的 shop-api 会话回答「不能，因为约定是周五不发版」。
 
 <img src="docs/images/session-reference.png" alt="shop-web 的会话：用户消息里有会话引用芯片和一段助手摘录，下方注明「引用会话 · 项目部署与数据库约定」，模型回答周五不发版" width="100%">
 
