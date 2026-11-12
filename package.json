@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-context-studio",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Context Studio for DeepSeek Harness: see every project's instructions, skills, sessions and memories as puzzle pieces, flag stale ones, remove them with undo, transplant pieces across projects, and compose a starting context for a new session. · DSH 上下文拼图台：看见、清理、跨项目拼接 memory 与 context，一键拼成起始上下文开新会话。",
   "repository": {
     "type": "git",

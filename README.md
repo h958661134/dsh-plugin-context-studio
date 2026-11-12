@@ -7,10 +7,10 @@
 [![version](https://img.shields.io/github/v/release/h958661134/dsh-plugin-context-studio?label=version&color=4f6bed)](https://github.com/h958661134/dsh-plugin-context-studio/releases)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.0%20%3C0.3.0-1f2937)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)](https://nodejs.org)
-[![tests](https://img.shields.io/badge/tests-42%20passing-22c55e)](tests)
+[![tests](https://img.shields.io/badge/tests-49%20passing-22c55e)](tests)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<img src="docs/images/studio.png" alt="上下文拼图台：左边是项目列表和操作记录，中间是当前项目的素材墙（每块指令都有来源、新旧、token 和体检标记），右边是拼盘、token 预算和拼好的起始上下文预览" width="100%">
+<img src="docs/images/lineage.png" alt="上下文拼图台的脉络视图：左边按 git 图的方式画出会话之间的分叉和引用，哪些会话连成一条链、哪些是独立的一目了然；右边是记忆矩阵，每列一份指令文件或技能，实心点表示这个会话加载的是当前版本，空心点表示加载的是旧版本" width="100%">
 
 </div>
 
@@ -54,6 +54,29 @@ dsh plugin --profile web add ./dsh-plugin-context-studio
 > `DSH_HOME=/tmp/dsh-try dsh --profile web --no-open --port 4001`
 
 ## 界面一览
+
+### 脉络：从会话出发，看哪些是一条链、哪些是独立的（v1.1）
+
+打开拼图台，默认就是脉络视图。左边像 git 图：每个会话是一个点，**分叉**画实线，**引用会话**画虚线，**子代理**画点线。连在一起的是一条**链路**，没连线的归到**独立会话**。右边是**记忆矩阵**：每列是一份指令文件或一个技能，● 表示这个会话加载过当前版本，○ 表示加载的是旧版本（文件后来改过）。
+
+这些关系都来自 DSH 会话日志里的真实记录，不是按文本猜的：加载了哪些指令文件、带什么 sha1；调用了哪些技能；引用了哪些会话；从哪个会话分叉。
+
+每份记忆按「被谁用过」分成四类，列底部的色条标出类别：
+
+| 类别 | 含义 | 你可以 |
+|---|---|---|
+| **共享** | 被不同的链路或独立会话用过，是公共底座 | 放着别动 |
+| **链内** | 只在一条链路里用过 | 迁移这条链时一起带走 |
+| **单次** | 只有一个会话用过 | 看看是不是一次性的东西 |
+| **未用** | 读到的会话里一次都没加载过 | 很可能已经过时，去素材墙看内容、移除（可撤销） |
+
+<img src="docs/images/lineage-session.png" alt="选中一个会话：它的上游会话和它加载过的记忆高亮，详情里显示来自哪个会话、加载了哪些记忆（旧版本标「旧」），以及接着它开新会话、摘录、打开、分叉、归档等按钮" width="100%">
+
+- **点一个会话**：高亮它的上下游和它加载过的记忆。可以接着它开新会话（作为 `@会话` 引用放进拼盘）、摘录、打开、**分叉**（先确认，在 DSH 里复制整段历史，不发送消息）、归档（可撤销）。
+- **点一列**：高亮用过这份记忆的会话，并说明它属于哪一类、是不是只被旧版本用过、里面有没有从别的项目拼入的内容。
+- **点链路标题**：高亮整条链用到的全部记忆，可以把最近 3 个会话一次放进拼盘。DSH 一条消息最多展开 3 个会话引用。
+
+<img src="docs/images/lineage-memory.png" alt="选中项目 AGENTS.md 这一列：用过它的三个会话高亮，详情说明它是共享记忆，而且用过它的会话加载的都是旧版本" width="100%">
 
 ### 素材墙：看见每一块
 
@@ -191,6 +214,7 @@ DSH 本身没有叫 memory 的存储。真正会进入模型上下文、相当�
 Host（lib/host.js，全局 Cordis 插件，inject: webServer）
   ├─ scan.js      项目 → 素材（指令 / 技能 / 会话 / Dot）+ 体检
   │                 用到 ctx.workspaceRegistry、ctx.sessionQuery（可选，缺了就降级）
+  ├─ graph.js     会话日志 → 会话链 / 独立会话 × 记忆使用矩阵（脉络图）
   ├─ markdown.js  指令文件拆块、按行删除、带标记追加
   ├─ ops.js       移除 / 写入 / 归档 / 撤销；备份、日志、哈希校验、原子写
   ├─ compose.js   拼盘渲染 + 预算
@@ -204,6 +228,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 ## 路线图
 
 - [x] v1.0：素材墙、体检、移除 / 归档 / 撤销、拼盘、跨项目写入、预填草稿开新会话
+- [x] v1.1：脉络图：从会话出发看链路和独立会话、记忆四分类、版本对比、分叉
 - [ ] 配方：把拼盘存成命名配方，按项目和任务类型一键复用
 - [ ] 技能移植：把技能目录复制到目标项目的 `.agents/skills`（不覆盖同名技能）
 - [ ] 语义体检：请模型判断某条约定和代码是否还一致（先征得你同意再花 token）
@@ -218,7 +243,7 @@ Host（lib/host.js，全局 Cordis 插件，inject: webServer）
 用起来哪里不顺手、想要什么功能，欢迎到 [Issues](https://github.com/h958661134/dsh-plugin-context-studio/issues) 里提。
 
 ```bash
-npm test          # node:test，42 个用例，不依赖 DSH
+npm test          # node:test，49 个用例，不依赖 DSH
 ```
 
 - 纯 JavaScript ESM，加 `// @ts-check`。运行时不依赖任何 `@deepseek-ai/*` 包。
