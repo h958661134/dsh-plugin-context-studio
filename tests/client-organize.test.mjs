@@ -5,7 +5,7 @@ import vm from 'node:vm'
 import { compose, sanitizeItems } from '../lib/compose.js'
 
 const code = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
-  .replace('return module.exports;', 'exports.test = { Organizer, Inspector, StudioPage, Board, reportNoteItem, organizeUsage }; return module.exports;')
+  .replace('return module.exports;', 'exports.test = { Organizer, ReportMap, Inspector, StudioPage, Board, reportNoteItem, organizeUsage }; return module.exports;')
 const all = root => !root || typeof root !== 'object' ? [] : Array.isArray(root) ? root.flatMap(all) : [root, ...all(root.children), ...all(root.props?.branch)]
 const text = root => JSON.stringify(root)
 const json = value => ({ ok: true, json: async () => value })
@@ -223,7 +223,11 @@ test('取消返回之后迟到的running状态不复活作业', async () => {
 test('刷新恢复完成报告与五类卡片，用量包含cache读写，读取不重新启动', async () => {
   const done = job({ status: 'completed', active: false, report, usage: { inputTokens: 20, outputTokens: 10, cacheReadTokens: 3, cacheWriteTokens: 4, reasoningTokens: 2, totalTokens: 37 } })
   const s = mount(server({ current: done, reports: [done] })); let tree = await s.settle()
-  labelled(tree, '会话整理报告')
+  const map = all(tree).find(n => n.type === s.h.api.ReportMap)
+  assert.ok(map)
+  const mapHarness = harness(s.api.fetch)
+  const mapTree = mapHarness.render(mapHarness.api.ReportMap, map.props)
+  labelled(mapTree, '会话整理报告')
   const status = labelled(tree, '整理作业状态')
   assert.match(status.props.className, /compact/)
   const details = all(status).find(n => n.type === 'details')
@@ -231,7 +235,7 @@ test('刷新恢复完成报告与五类卡片，用量包含cache读写，读取
   assert.match(text(details), /实际输入 27 tokens|已发生的用量不会返还/)
   assert.match(text(status), /输入 27 · 输出 10 tokens/)
   button(status, '重新整理（先预览）')
-  for (const label of ['目标与约束', '已有结论', '关键证据', '待核对', '建议下一步', 'AI 整理 · 需核对']) assert.ok(text(tree).includes(label), label)
+  for (const label of ['目标与约束', '已有结论', '关键证据', '待核对', '建议下一步', 'AI 整理 · 需核对']) assert.ok(text(mapTree).includes(label), label)
   assert.match(text(tree), /实际输入 27 tokens|缓存读取 3|写入 4|推理 2/)
   click(tree, '刷新已有状态'); tree = await s.settle()
   assert.equal(s.api.calls.some(c => c.path === 'organize-start' || c.path === 'organize-preview'), false)
@@ -252,19 +256,30 @@ test('failed/cancelled/interrupted只显示结果与重新预览入口，不自�
   }
 })
 
-test('报告采用动作仅回调草稿，建议与原文分开；证据带job.answer跳原文', async () => {
+test('报告地图先选节点再预览，原文在图内查看并可带边界跳回历史', async () => {
   const received = [], done = job({ status: 'completed', active: false, report })
   const s = mount(server({ current: done, reports: [done] }), {
     onNote: (j, card) => received.push({ type: 'note', j, card }),
     onEvidence: (j, origin) => received.push({ type: 'source', j, origin }),
     onSource: (j, origin) => received.push({ type: 'jump', j, origin }),
+    onPrepareMap: (j, selection) => received.push({ type: 'prepare', j, selection }),
   })
   const tree = await s.settle()
-  click(tree, '加入分支草稿'); click(tree, '将建议加入分支草稿'); click(tree, '将这段原文加入草稿'); click(tree, '原文 #3')
-  assert.deepEqual(received.map(x => x.type), ['note', 'note', 'source', 'jump'])
-  assert.equal(received[1].card.body, report.branch.task)
-  assert.equal(received[2].origin.offset, 0)
-  assert.equal(received[3].j.answer, 100); assert.equal(received[3].origin.seq, 3)
+  const map = all(tree).find(n => n.type === s.h.api.ReportMap), mh = harness(s.api.fetch)
+  const render = () => mh.render(mh.api.ReportMap, map.props)
+  let view = render()
+  labelled(view, '查看节点：先验证再改动').props.onClick(); view = render()
+  labelled(view, '查看原文 #3').props.onClick(); view = render()
+  assert.match(text(view), /保留来源|这是截取片段|已截短/)
+  assert.equal(received.length, 0)
+  click(view, '在原始记录中查看')
+  click(view, '← 返回节点'); view = render()
+  labelled(view, '选用节点：先验证再改动').props.onChange(); view = render()
+  click(view, '预览新会话 →')
+  assert.deepEqual(received.map(x => x.type), ['jump', 'prepare'])
+  assert.equal(received[0].j.answer, 100); assert.equal(received[0].origin.seq, 3)
+  assert.deepEqual(Array.from(received[1].selection.cards), ['n'])
+  assert.deepEqual(Array.from(received[1].selection.sources), [3])
   assert.equal(s.api.calls.some(c => c.body), false)
 })
 
