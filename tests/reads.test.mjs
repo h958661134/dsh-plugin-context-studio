@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { boundedReads, boundedQuery, sessionCatalog } from '../lib/reads.js'
 import { buildLineage } from '../lib/graph.js'
 import { fixture } from './helpers.mjs'
+import { createContextReader } from '../lib/context-view.js'
 
 test('超时退出，但重试共享未结束的 I/O；同时限制底层工作数量', async () => {
   const run = boundedReads({ timeoutMs: 15, maxPending: 1 })
@@ -24,6 +25,23 @@ test('同一 query 的并发调用合并，服务替换不复用旧结果', asyn
   assert.equal(count, 1); assert.equal(a.owner, true); assert.equal(a,b)
   q = { async readSession() { return 'new' } }
   assert.equal(await get().readSession('s'), 'new')
+})
+
+test('真实服务的多次 Cordis 代理读取保留去重、限流和快照缓存', async () => {
+  let calls = 0
+  let q = { async readSession(id) { calls++; if (id === 'hang') return new Promise(() => {}); return { session: { id }, events: [] } } }
+  const raw = () => new Proxy(q, { get(target, prop) { return prop === Symbol.for('cordis.original') ? target : Reflect.get(target, prop) } })
+  const get = boundedQuery(raw, { timeoutMs: 15, maxPending: 1, reserved: 0 })
+  const [a, b] = await Promise.all([get().readSession('s'), get().readSession('s')])
+  assert.equal(calls, 1); assert.equal(a, b)
+  const reader = createContextReader(get, { identity: raw })
+  await reader.view('s'); await reader.view('s')
+  assert.equal(calls, 2, 'second view must reuse the snapshot despite a fresh proxy')
+  await assert.rejects(get().readSession('hang'), e => e.status === 504)
+  await assert.rejects(get().readSession('other'), e => e.status === 503)
+  q = { async readSession(id) { calls++; return { session: { id }, events: [] } } }
+  await reader.view('s')
+  assert.equal(calls, 4, 'a genuine service replacement must invalidate old cache and pending slots')
 })
 
 test('后台挂起保留交互和目录读取名额，更换服务不继承旧占位', async () => {

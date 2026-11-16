@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 
 const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
-  .replace('return module.exports;', 'exports.test = { request, Inspector, StudioPage, Board, evidenceItem, FlowGraph, flowLayout, observeCurrentSession, setServices: value => { services = value } }; return module.exports;')
+  .replace('return module.exports;', 'exports.test = { request, Inspector, Organizer, StudioPage, Board, evidenceItem, FlowGraph, flowLayout, observeCurrentSession, setServices: value => { services = value } }; return module.exports;')
 const nodes = root => !root || typeof root !== 'object' ? [] : Array.isArray(root) ? root.flatMap(nodes) : [root, ...nodes(root.children), ...nodes(root.props?.branch)]
 const text = root => JSON.stringify(root)
 const json = data => ({ ok: true, json: async () => data })
@@ -362,7 +362,7 @@ test('草稿按session/event/part/绝对范围去重，快速重复加入安全�
   }, saved)
   h.render(h.api.StudioPage); await tick()
   let tree = h.render(h.api.StudioPage)
-  const inspector = nodes(tree).find(n => n.type === h.api.Inspector)
+  const inspector = nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer)
   const row = { ...record(), text: 'same', textOffset: 0, sourcePart: 'body', selectionStart: 0 }
   inspector.props.onAdd(baseProps.session, row, 'same')
   inspector.props.onAdd(baseProps.session, row, 'same')
@@ -389,7 +389,7 @@ test('顶部会话目录独立于Inspector，并能直接切到另一个会话',
   let tree = h.render(h.api.StudioPage)
   labelled(tree, '从目录选择会话').props.onChange(event('B'))
   tree = h.render(h.api.StudioPage)
-  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector).props.session.id, 'B')
+  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer).props.session.id, 'B')
   assert.equal(calls.some(u => u.includes('/graph') || u.includes('/pieces') || u.includes('/inspect')), false)
 })
 
@@ -533,13 +533,13 @@ test('apply期观察当前会话，进插件后无mainView仍保留刚才会话�
   key = undefined; listener()
   h.render(h.api.StudioPage); await tick()
   let tree = h.render(h.api.StudioPage)
-  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector).props.session.id, 'A')
+  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer).props.session.id, 'A')
   assert.match(text(tree), /刚才查看的会话/)
   labelled(tree, '从目录选择会话').props.onChange(event('B'))
   key = 'C'; listener(); tree = h.render(h.api.StudioPage)
-  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector).props.session.id, 'B')
+  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer).props.session.id, 'B')
   click(tree, '跟随刚才查看的会话'); tree = h.render(h.api.StudioPage)
-  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector).props.session.id, 'C')
+  assert.equal(nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer).props.session.id, 'C')
   h.unmount(); stop(); assert.equal(disposed, 1)
 })
 
@@ -549,7 +549,7 @@ test('当前会话服务缺失或订阅异常时回退目录，不读取私有se
     const stop = h.api.observeCurrentSession({ get: () => service })
     h.render(h.api.StudioPage); await tick()
     const tree = h.render(h.api.StudioPage)
-    assert.equal(nodes(tree).find(n => n.type === h.api.Inspector).props.session.id, 'B')
+    assert.equal(nodes(tree).find(n => n.type === h.api.Inspector || n.type === h.api.Organizer).props.session.id, 'B')
     assert.equal(button(tree, '跟随刚才查看的会话').props.disabled, true)
     stop(); h.unmount()
   }
