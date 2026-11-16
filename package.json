@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-context-studio",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Context Studio for DeepSeek Harness: inspect historical context behind an answer, investigate source and tool issues, and reuse selected evidence in a new session. · DSH 上下文工作台：追溯回答前的上下文、核对问题线索、挑选片段开新会话；支持记忆清理与跨项目复用。",
   "repository": {
     "type": "git",

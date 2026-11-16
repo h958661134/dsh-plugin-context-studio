@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { buildGraph, buildLineage, extractFacts, layoutChain, pathKey, resolveLoadPath, sha1 } from '../lib/graph.js'
 import { createHandlers, resolveConfig } from '../lib/host.js'
 import { fixture } from './helpers.mjs'
@@ -204,4 +204,218 @@ test('buildGraph: 复用的空白会话按第一条消息排序（真实 DSH 里
   assert.deepEqual(g.chains[0].sessions.map(s => s.id), ['api', 'web'])
   assert.equal(g.chains[0].edges[0].style, 'straight')
   assert.equal(g.chains[0].sessions[1].startTime, 900)
+})
+
+// All graph I/O regressions below use memory only, including root discovery and skills.
+function memoryGraph(events = []) {
+  const root = resolve('/graph-memory-test'), project = join(root, 'project')
+  const homes = { dshHome: join(root, 'dsh'), agentsHome: join(root, 'agents') }
+  const files = new Map(), directories = new Set(), calls = [], hooks = {}
+  const missing = () => Object.assign(new Error('missing'), { code: 'ENOENT' })
+  function mkdir(path) {
+    path = resolve(path)
+    directories.add(path)
+    if (dirname(path) !== path) mkdir(dirname(path))
+  }
+  function put(path, body) { path = resolve(path); mkdir(dirname(path)); files.set(path, body); return path }
+  mkdir(project); mkdir(join(project, '.git')); mkdir(homes.dshHome); mkdir(homes.agentsHome)
+  const base = {
+    async stat(path) {
+      if (files.has(path)) return { isFile: () => true, size: Buffer.byteLength(files.get(path)), mtimeMs: 1 }
+      if (directories.has(path)) return { isFile: () => false, size: 0 }
+      throw missing()
+    },
+    async readFile(path) { if (files.has(path)) return files.get(path); throw missing() },
+    async readdir(path) {
+      if (!directories.has(path)) throw missing()
+      const entries = new Map()
+      for (const dir of directories) if (dir !== path && dirname(dir) === path) entries.set(basename(dir), { name: basename(dir), isFile: () => false, isDirectory: () => true })
+      for (const file of files.keys()) if (dirname(file) === path) entries.set(basename(file), { name: basename(file), isFile: () => true, isDirectory: () => false })
+      return [...entries.values()]
+    },
+  }
+  const io = Object.fromEntries(Object.entries(base).map(([method, fn]) => [method, async (path, options) => {
+    path = resolve(path); calls.push({ method, path, options })
+    return hooks[method] ? hooks[method](path, options, fn) : fn(path, options)
+  }]))
+  const workspace = { id: 'p', title: 'project', path: project, sessionIds: ['s1'] }
+  const env = { homes, graphIO: io, graphBudgetMs: 1000, graphIOTimeoutMs: 10,
+    workspaceRegistry: { list: () => [workspace], get: id => id === 'p' ? workspace : undefined },
+    sessionQuery: { listSessions: async () => [{ header: { id: 's1', cwd: project, createdAt: 1 } }],
+      readTitleSnapshots: async ids => ids.map(() => ({ status: 'fulfilled', value: { title: { title: 'test' } } })),
+      readSession: async () => ({ events }) } }
+  return { env, project, homes, calls, hooks, put, mkdir, files, directories, missing }
+}
+const pending = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
+const loaded = path => ins(1, [{ action: 'set', path, digest: sha1('old') }])
+
+test('graph I/O: known, missing and unknown files have distinct version semantics', async () => {
+  const f = memoryGraph([loaded('AGENTS.md'), loaded('gone.md'), loaded('blocked.md')])
+  f.put(join(f.project, 'AGENTS.md'), 'old')
+  const blocked = f.put(join(f.project, 'blocked.md'), 'old')
+  f.hooks.readFile = (path, _, read) => path === blocked ? Promise.reject(Object.assign(new Error('denied'), { code: 'EACCES' })) : read(path)
+  const g = await buildLineage(f.env, 'p')
+  const find = path => g.memories.find(m => m.key === pathKey(join(f.project, path)))
+  assert.equal(find('AGENTS.md').readState, 'read'); assert.equal(find('AGENTS.md').uses[0].current, true)
+  assert.equal(find('gone.md').exists, false); assert.equal(find('gone.md').readState, 'missing'); assert.equal(find('gone.md').outdated, true)
+  assert.equal(find('blocked.md').exists, null); assert.equal(find('blocked.md').readState, 'unknown')
+  assert.equal(find('blocked.md').uses[0].current, null); assert.equal(find('blocked.md').outdated, false)
+  assert.equal(g.partial, true)
+  assert.ok(g.fileFailures.some(e => e.path === blocked && e.code === 'EACCES'))
+  assert.equal(f.calls.filter(c => c.path.endsWith('AGENTS.md') && c.path.startsWith(f.project) && c.method === 'readFile').length, 1, 'candidate and historical use share one read; no pre-read')
+})
+
+test('graph I/O: absent optional candidates are not failures or invented memories', async () => {
+  const f = memoryGraph()
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(g.partial, false); assert.deepEqual(g.fileFailures, []); assert.deepEqual(g.memories, [])
+  assert.equal(g.scan.pendingIO, 0)
+})
+
+test('graph I/O: zero total budget starts neither query nor filesystem work', async () => {
+  const f = memoryGraph()
+  let queries = 0
+  f.env.graphBudgetMs = 0
+  for (const key of Object.keys(f.env.sessionQuery)) f.env.sessionQuery[key] = async () => { queries++; throw Error('must not run') }
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(queries, 0); assert.equal(f.calls.length, 0)
+  assert.equal(g.scan.reason, 'GRAPH_BUDGET'); assert.equal(g.partial, true)
+  assert.ok(g.singles[0].readError)
+})
+
+test('graph I/O: a hung root lookup stops the scan and late completion starts no ancestry reads', { timeout: 2000 }, async () => {
+  const f = memoryGraph(), wait = pending()
+  f.hooks.stat = () => wait.promise
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(f.calls.length, 1); assert.equal(g.scan.pendingIO, 1); assert.equal(g.scan.maxPendingIO, 4)
+  assert.equal(g.scan.reason, 'GRAPH_IO_TIMEOUT'); assert.equal(g.partial, true)
+  assert.match(g.scan.limitation, /单次扫描.*跨请求/)
+  wait.resolve({ isFile: () => false }); await new Promise(setImmediate)
+  assert.equal(f.calls.length, 1)
+})
+
+test('graph I/O: hung candidate read is unknown and does not launch remaining candidates or skills', { timeout: 2000 }, async () => {
+  const f = memoryGraph([loaded('AGENTS.md'), loaded('later.md')]), wait = pending()
+  const file = f.put(join(f.project, 'AGENTS.md'), 'old')
+  f.put(join(f.project, 'later.md'), 'old')
+  f.put(join(f.project, '.agents', 'skills', 'deploy', 'SKILL.md'), '---\nname: deploy\n---\nbody')
+  f.hooks.readFile = () => wait.promise
+  const g = await buildLineage(f.env, 'p'), count = f.calls.length
+  const m = g.memories.find(m => m.key === pathKey(file))
+  assert.equal(m.exists, null); assert.equal(m.readState, 'unknown'); assert.equal(m.outdated, false)
+  assert.equal(m.uses[0].current, null); assert.equal(g.scan.pendingIO, 1)
+  assert.equal(g.memories.find(m => m.key === pathKey(join(f.project, 'later.md'))).exists, null)
+  assert.equal(f.calls.filter(c => c.method === 'readFile').length, 1)
+  assert.equal(f.calls.some(c => c.path.includes('skills')), false)
+  assert.equal(f.calls.find(c => c.method === 'readFile').options.signal.aborted, true)
+  wait.resolve('late body'); await new Promise(setImmediate)
+  assert.equal(f.calls.length, count); assert.equal(m.exists, null, 'late data cannot mutate a returned partial result')
+})
+
+test('graph I/O: hanging nested directory enumeration cannot resume traversal after timeout', { timeout: 2000 }, async () => {
+  const f = memoryGraph(), wait = pending()
+  f.hooks.readdir = () => wait.promise
+  const g = await buildLineage(f.env, 'p'), count = f.calls.length
+  assert.equal(g.scan.pendingIO, 1); assert.equal(g.partial, true)
+  assert.ok(g.fileFailures.some(e => e.operation === 'directory'))
+  wait.resolve([{ name: 'later', isDirectory: () => true, isFile: () => false }]); await new Promise(setImmediate)
+  assert.equal(f.calls.length, count)
+})
+
+test('graph I/O: skills enumeration and skill-file reads both stop on timeout', { timeout: 2000 }, async () => {
+  for (const stage of ['directory', 'file']) {
+    const f = memoryGraph(), wait = pending()
+    const root = join(f.project, '.dsh', 'skills')
+    f.put(join(root, 'deploy', 'SKILL.md'), '---\nname: deploy\n---\nbody')
+    // The nested instruction traversal ignores no special roots; only hang at the skill stage.
+    if (stage === 'directory') {
+      let visits = 0
+      f.hooks.readdir = (path, _, read) => path === root && ++visits === 2 ? wait.promise : read(path)
+    } else f.hooks.readFile = (path, _, read) => path.endsWith('SKILL.md') ? wait.promise : read(path)
+    const g = await buildLineage(f.env, 'p'), count = f.calls.length
+    assert.equal(g.scan.pendingIO, 1); assert.equal(g.scan.reason, 'GRAPH_IO_TIMEOUT')
+    assert.equal(g.partial, true)
+    if (stage === 'file') { const m = g.memories.find(m => m.kind === 'skill'); assert.equal(m.readState, 'unknown'); assert.equal(m.exists, null) }
+    wait.resolve(stage === 'directory' ? [] : 'late'); await new Promise(setImmediate)
+    assert.equal(f.calls.length, count)
+  }
+})
+
+test('graph I/O: total budget caps file waits even when the per-I/O limit is longer', { timeout: 2000 }, async () => {
+  const f = memoryGraph(), wait = pending()
+  f.env.graphBudgetMs = 15; f.env.graphIOTimeoutMs = 1000
+  f.hooks.stat = () => wait.promise
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(g.scan.reason, 'GRAPH_BUDGET'); assert.equal(f.calls.length, 1)
+  wait.resolve({ isFile: () => false })
+})
+
+test('graph I/O: elapsed total budget between successful operations prevents the next primitive', async () => {
+  const f = memoryGraph(); let clock = 0
+  f.env.graphNow = () => clock; f.env.graphBudgetMs = 10
+  f.hooks.stat = async (path, _, read) => { const result = await read(path); clock = 11; return result }
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(f.calls.length, 1); assert.equal(g.scan.reason, 'GRAPH_BUDGET'); assert.equal(g.scan.pendingIO, 0)
+})
+
+test('graph I/O: project-root failure never resolves relative history against a guessed cwd', async () => {
+  const f = memoryGraph([loaded('AGENTS.md')])
+  f.hooks.stat = () => Promise.reject(Object.assign(new Error('root denied'), { code: 'EACCES' }))
+  const g = await buildLineage(f.env, 'p')
+  const m = g.memories.find(m => m.key.startsWith('unresolved:'))
+  assert.ok(m); assert.equal(m.exists, null); assert.equal(m.uses[0].current, null)
+  assert.equal(g.summary.outdated, 0); assert.equal(g.partial, true)
+})
+
+test('graph I/O: nested instructions, skip rules and custom skill names remain discoverable', async () => {
+  const f = memoryGraph()
+  f.put(join(f.project, 'AGENTS.md'), '# rules')
+  const nested = f.put(join(f.project, 'packages', 'core', 'AGENTS.md'), 'nested')
+  const ignored = f.put(join(f.project, 'node_modules', 'x', 'AGENTS.md'), 'ignored')
+  f.put(join(f.project, '.agents', 'skills', 'deploy', 'SKILL.md'), '---\nname: release\n---\nbody')
+  const g = await buildLineage(f.env, 'p')
+  assert.ok(g.memories.some(m => m.path === nested))
+  assert.ok(!g.memories.some(m => m.path === ignored))
+  assert.ok(!f.calls.some(c => c.path === ignored))
+  assert.equal(g.memories.find(m => m.key === 'skill:release').readState, 'read')
+  assert.equal(g.partial, false)
+})
+
+test('graph I/O: ENOTDIR and oversized files are unknown, never confirmed missing', async () => {
+  for (const code of ['ENOTDIR', 'EIO']) {
+    const f = memoryGraph([loaded('AGENTS.md')]), path = join(f.project, 'AGENTS.md')
+    f.hooks.stat = (p, _, read) => p === path ? Promise.reject(Object.assign(new Error(code), { code })) : read(p)
+    const g = await buildLineage(f.env, 'p'), m = g.memories.find(m => m.key === pathKey(path))
+    assert.equal(m.exists, null); assert.equal(m.readState, 'unknown'); assert.equal(m.outdated, false)
+  }
+  const f = memoryGraph([loaded('AGENTS.md')]), path = f.put(join(f.project, 'AGENTS.md'), 'x'.repeat(1024 * 1024 + 1))
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(g.memories.find(m => m.key === pathKey(path)).exists, null)
+  assert.ok(!f.calls.some(c => c.method === 'readFile' && c.path === path))
+})
+
+test('graph I/O: concurrent root hangs retain at most four raw filesystem operations', { timeout: 2000 }, async () => {
+  const f = memoryGraph([loaded('AGENTS.md')]), wait = pending()
+  const ids = Array.from({ length: 20 }, (_, i) => `s${i}`)
+  const workspace = { id: 'p', title: 'project', path: f.project, sessionIds: ids }
+  f.env.workspaceRegistry = { list: () => [workspace], get: () => workspace }
+  f.env.sessionQuery.listSessions = async () => ids.map((id, i) => ({ header: { id, cwd: join(f.project, `child-${i}`), createdAt: i } }))
+  f.hooks.stat = () => wait.promise
+  const g = await buildLineage(f.env, 'p'), count = f.calls.length
+  assert.equal(count, 4); assert.equal(g.scan.pendingIO, 4); assert.equal(g.scan.maxPendingIO, 4)
+  assert.equal(g.partial, true); assert.ok(g.memories.every(m => m.exists === null && !m.outdated))
+  wait.resolve({ isFile: () => false }); await new Promise(setImmediate)
+  assert.equal(f.calls.length, count)
+})
+
+test('graph I/O: a metadata hang consumes the total budget without starting file scanning', { timeout: 2000 }, async () => {
+  const f = memoryGraph(), wait = pending(); let laterQueries = 0
+  f.env.graphBudgetMs = 15
+  f.env.sessionQuery.listSessions = () => wait.promise
+  f.env.sessionQuery.readTitleSnapshots = async () => { laterQueries++; return [] }
+  f.env.sessionQuery.readSession = async () => { laterQueries++; return { events: [] } }
+  const g = await buildLineage(f.env, 'p')
+  assert.equal(g.scan.reason, 'GRAPH_BUDGET'); assert.equal(f.calls.length, 0); assert.equal(laterQueries, 0)
+  wait.resolve([]); await new Promise(setImmediate)
+  assert.equal(f.calls.length, 0); assert.equal(laterQueries, 0)
 })

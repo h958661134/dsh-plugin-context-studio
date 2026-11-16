@@ -49,13 +49,20 @@ test('compose: 预算与超出位置', () => {
   assert.equal(empty.count, 0)
 })
 
-test('sanitizeItems: 拒绝坏输入、截断超长', () => {
+test('sanitizeItems: 拒绝坏输入和超长正文，绝不静默截断', () => {
   assert.throws(() => sanitizeItems('x'), /数组/)
   assert.throws(() => sanitizeItems([{ kind: 'evil', text: '' }]), /类型不对/)
   assert.throws(() => sanitizeItems([{ kind: 'note' }]), /缺少内容/)
   assert.throws(() => sanitizeItems(new Array(201).fill({ kind: 'note', text: 'a' })), /最多/)
-  const [it] = sanitizeItems([{ kind: 'note', text: 'x'.repeat(30000), role: 'hacker', title: 5 }])
+  assert.throws(() => sanitizeItems([{ kind: 'note', text: 'x'.repeat(20001) }]), e => e.status === 400)
+  const [it] = sanitizeItems([{ kind: 'note', text: 'x'.repeat(20000), role: 'hacker', title: 5 }])
   assert.equal(it.text.length, 20000)
   assert.equal(it.role, undefined)
   assert.equal(it.title, undefined)
+})
+
+test('非法时间降级为无日期，仍能生成完整草稿', () => {
+  const items = sanitizeItems([{ kind: 'snippet', text: 'TAIL', time: 1e20 }])
+  assert.equal(items[0].time, null)
+  assert.match(compose(items).text, /TAIL/)
 })

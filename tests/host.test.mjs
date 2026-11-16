@@ -22,6 +22,8 @@ test('guard: 本机、同源、写操作要头和 JSON', () => {
   assert.equal(hostAllowed(undefined, allowed), false)
   const base = { method: 'GET', headers: { host: '127.0.0.1:4001' } }
   assert.equal(checkRequest(base, allowed, false), null)
+  assert.equal(checkRequest({ ...base, socket: { remoteAddress: '203.0.113.8' } }, allowed, false), 'non-loopback client')
+  assert.equal(checkRequest({ ...base, headers: { ...base.headers, origin: 'https://127.0.0.1:4001' } }, allowed, false), 'cross-origin')
   assert.equal(checkRequest({ ...base, method: 'DELETE' }, allowed, false), 'method')
   assert.equal(checkRequest({ ...base, headers: { ...base.headers, origin: 'http://evil.com' } }, allowed, false), 'cross-origin')
   assert.equal(checkRequest({ ...base, headers: { ...base.headers, origin: 'not a url' } }, allowed, false), 'bad origin')
@@ -149,6 +151,12 @@ test('端到端：看素材 → 移除可疑块 → 撤销 → 跨项目写入 �
     assert.equal(bad400.status, 400)
     // 缺参数 → 400
     assert.equal((await t.get('/pieces')).status, 400)
+    assert.equal((await t.post('/compose', { items: 'bad' })).status, 400)
+    assert.equal((await t.post('/compose', { items: [], task: 'x'.repeat(20001) })).status, 400)
+    assert.equal((await t.post('/compose', { items: [], padding: 'x'.repeat(600 * 1024) })).status, 413)
+    const catalog = await t.get('/sessions?project=wa')
+    assert.equal(catalog.status, 200)
+    assert.ok(catalog.body.sessions.some(s => s.title === '修登录 bug'))
   } finally {
     await t.close()
   }
