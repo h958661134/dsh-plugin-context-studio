@@ -24,7 +24,7 @@ function harness({ fetch = () => new Promise(()=>{}), saved = {}, storageFails =
   return { api, timers, context, render(component,props={}) {cursor=0;tree=component(props); const jobs=pending;pending=[];jobs.forEach(f=>f()); return tree}, unmount(){effects.forEach(e=>e?.cleanup?.())} }
 }
 const tick = () => new Promise(setImmediate)
-const nodes = root => !root || typeof root !== 'object' ? [] : Array.isArray(root) ? root.flatMap(nodes) : [root,...nodes(root.children)]
+const nodes = root => !root || typeof root !== 'object' ? [] : Array.isArray(root) ? root.flatMap(nodes) : [root,...nodes(root.children),...nodes(root.props?.branch)]
 const text = root => JSON.stringify(root)
 const json = d => ({ ok:true,json:async()=>d })
 
@@ -57,10 +57,10 @@ test('默认回答排查只加载会话目录，不等待 graph 或扫描文件�
 test('会话 A 晚到不会覆盖 B；切换会话会中止旧历史请求', async () => {
   const jobs=[]
   const h=harness({fetch:(url,opts)=>new Promise(resolve=>jobs.push({url,opts,resolve}))})
-  const snapshot={sessionId:'B',boundary:0,answer:null,timeline:[],timelineInfo:{total:0},modules:[],warnings:[],summary:{active:0,added:0},page:{module:'requirements',state:'active',index:0,total:0,pages:0,items:[]}}
+  const snapshot={sessionId:'B',boundary:0,answer:null,timeline:[],timelineInfo:{total:0},modules:[],warnings:[],summary:{active:0,added:0},flow:{comparison:{available:true,first:true,added:0,retained:0,removed:0},scope:'changes',page:{index:0,total:0,pages:0},nodes:[],anchors:[],edges:[],guidance:[]}}
   const props={session:{id:'A',title:'A'},has:()=>false}
   h.render(h.api.Inspector,props)
-  assert.match(jobs[0].url,/\/inspect-view\?id=A/)
+  assert.match(jobs[0].url,/\/inspect-flow\?id=A/)
   h.render(h.api.Inspector,{...props,session:{id:'B',title:'B'}})
   assert.equal(jobs[0].opts.signal.aborted,true)
   jobs[1].resolve(json(snapshot));await tick()
