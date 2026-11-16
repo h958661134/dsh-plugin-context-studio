@@ -266,13 +266,13 @@ async function testDirectory(t) {
   return dataDir
 }
 
-test('map: v2 receipt and normalized relations persist through one fake model call and restart', async t => {
+test('map: v3 receipt and normalized relations persist through one fake model call and restart', async t => {
   const dataDir = await testDirectory(t), receipts = [], counts = { prepare: 0, stream: 0 }
   const llm = {
     listProviders: () => [{ id: 'fake' }], listModels: async () => [{ id: 'fake-model' }],
     async prepareCall(config) {
       counts.prepare++
-      assert.equal(receipts[0].templateVersion, 2, 'v2 receipt must exist before prepare')
+      assert.equal(receipts[0].templateVersion, 3, 'v3 receipt must exist before prepare')
       return { config, stream(request) {
         counts.stream++
         assert.deepEqual(request.tools, [])
@@ -303,7 +303,7 @@ test('map: v2 receipt and normalized relations persist through one fake model ca
   assert.equal(job.persistenceWarning, undefined)
   assert.deepEqual(job.report.relations, parse({ relations: [edge()] }).relations)
   const saved = JSON.parse(await readFile(join(dataDir, 'organize', plan.planId.split('.')[0], `${plan.planId}.json`), 'utf8'))
-  assert.equal(saved.templateVersion, 2)
+  assert.equal(saved.templateVersion, 3)
   assert.equal(saved.version, 1, 'storage schema version remains backward compatible')
   assert.deepEqual(saved.report, job.report)
   const restarted = createOrganizer(deps)

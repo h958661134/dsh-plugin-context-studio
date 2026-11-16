@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-context-studio",
-  "version": "1.6.0",
-  "description": "Context Studio for DeepSeek Harness: interactive task maps from opt-in AI briefs, evidence inspection and selected-context session drafts. · DSH 上下文调试：将会话整理变成可交互任务地图，核对依据，用所选内容开始新会话。",
+  "version": "1.7.0",
+  "description": "Context Studio for DeepSeek Harness: inspect AI-organized context paths, verify sources and derive session drafts from whole chains or selected nodes. · DSH上下文分支控制台：核对来源，选用整链或局部，预览后派生新会话草稿。",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/h958661134/dsh-plugin-context-studio.git"
