@@ -14,7 +14,7 @@
 
 </div>
 
-当前本地版本为 **v1.8.0，尚未推送或发布**。分支控制台新增分层连线：默认看整理路径，点击连接核对两端，分叉处先选方向；关联和派生来源只在查看时展开。旧报告继续免费查看；只有新报告明确提供的路径才可整链选用。Release 徽章指向已公开版本，GitHub 克隆暂不包含这批本地改进。
+当前版本为 **[v1.8.0](https://github.com/h958661134/dsh-plugin-context-studio/releases/tag/v1.8.0)**。分支控制台新增分层连线：默认看整理路径，点击连接核对两端，分叉处先选方向；关联和派生来源只在查看时展开。旧报告继续免费查看；只有新报告明确提供的路径才可整链选用。本次包含 v1.2–v1.7 的本地开发成果，完整升级说明见 [Release](https://github.com/h958661134/dsh-plugin-context-studio/releases/tag/v1.8.0)。
 
 本页地图截图来自隔离 DSH 的真实界面，**报告与关系是明确标注的固定模拟数据，本次没有调用模型**，用于验证交互，不代表真实分析质量或收费。原始记录、旧草稿、文件和备份保留。
 
@@ -35,12 +35,20 @@ Context Studio 提供两种视角：**任务地图**以分支控制台组织已�
 
 要求：DeepSeek Harness `0.2.x`，Node.js ≥ 22。
 
+从 [Release](https://github.com/h958661134/dsh-plugin-context-studio/releases/tag/v1.8.0) 下载 `dsh-plugin-context-studio-1.8.0.tgz`，在下载目录安装：
+
+```bash
+dsh plugin --profile desktop add ./dsh-plugin-context-studio-1.8.0.tgz
+```
+
+也可安装源码：
+
 ```bash
 git clone https://github.com/h958661134/dsh-plugin-context-studio.git
 dsh plugin --profile desktop add ./dsh-plugin-context-studio
 ```
 
-网页版使用 `--profile web`。安装或更新后，**完全退出 DSH（包括托盘）再打开**。已链接本地目录的用户无需重复安装；本地修改不会自动成为 GitHub 发布版。
+网页版使用 `--profile web`。安装或更新后，**完全退出 DSH（包括托盘）再打开**。已链接本地源码目录的用户，更新该目录后重启即可，无需重复安装；本次开发目录已包含最新版本。
 
 在 DSH 打开会话，再进入“上下文调试”。有成功报告时直接看地图；没有报告时，选择整理目的、模型，再预览范围。插件不接收 API key，使用 DSH 已配置的模型目录；未配置模型仍可查看原始记录和已有地图、准备草稿。建议用独立环境试用：
 
@@ -307,7 +315,7 @@ npm test
 npm pack --dry-run
 ```
 
-本地 v1.8.0：**427/427 测试通过，0失败、0跳过、0TODO**。自动化结果与独立审查记录见 [v1.8 工程校验](docs/REVIEW-1.8.md)。未调用真实模型；真实供应商服务、路径质量和计费仍需用户确认后另行验证。
+v1.8.0：**427/427 测试通过，0失败、0跳过、0TODO**。自动化结果与独立审查记录见 [v1.8 工程校验](docs/REVIEW-1.8.md)。本轮开发验收未调用真实模型；真实供应商服务、路径质量和计费仍需用户确认后另行验证。
 
 测试使用 `node:test`、合成日志、客户端 VM、假 LLM 与本地 HTTP；真实 UI 仅在独立 `DSH_HOME` 的4001端口验收。模拟生成不能证明供应商实际收费或整理质量，隔离浏览器通过不等于所有原生桌面版本已验收。
 
