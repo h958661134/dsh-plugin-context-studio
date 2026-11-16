@@ -161,3 +161,22 @@ test('端到端：看素材 → 移除可疑块 → 撤销 → 跨项目写入 �
     await t.close()
   }
 })
+
+test('HTTP 模块目录与原文分页读取超过旧容量的会话，响应保持小页', async () => {
+  const t = await boot()
+  try {
+    const source = '长原文'.repeat(400000) + 'TAIL-END'
+    t.f.sessionQuery.readSession = async () => ({ session: { id: 's1' }, events: [
+      { seq: 0, type: 'user/message', surfaceOp: 'append', data: { source: { kind: 'user' }, content: [{ type: 'text', text: source }] } },
+      { seq: 1, type: 'assistant/message', surfaceOp: 'append', data: { message: { content: [{ type: 'text', text: 'answer' }] } } },
+    ] })
+    const view = await t.get('/inspect-view?id=s1')
+    assert.equal(view.status, 200)
+    assert.equal(view.body.summary.active, 1)
+    assert.ok(JSON.stringify(view.body).length < 20000)
+    const end = await t.get('/inspect-detail?id=s1&answer=1&event=0&offset=1200000')
+    assert.equal(end.status, 200); assert.equal(end.body.text, 'TAIL-END')
+    assert.equal(end.body.row.textOffset, 1200000)
+    assert.equal((await t.get('/inspect-detail?id=s1&answer=1&event=0&offset=-1')).status, 400)
+  } finally { await t.close() }
+})

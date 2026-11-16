@@ -57,9 +57,10 @@ test('默认回答排查只加载会话目录，不等待 graph 或扫描文件�
 test('会话 A 晚到不会覆盖 B；切换会话会中止旧历史请求', async () => {
   const jobs=[]
   const h=harness({fetch:(url,opts)=>new Promise(resolve=>jobs.push({url,opts,resolve}))})
-  const snapshot={context:[],shadowed:[],unplaced:[],timeline:[],warnings:[],summary:{active:0,added:0,tokens:0},request:{}}
+  const snapshot={sessionId:'B',boundary:0,answer:null,timeline:[],timelineInfo:{total:0},modules:[],warnings:[],summary:{active:0,added:0},page:{module:'requirements',state:'active',index:0,total:0,pages:0,items:[]}}
   const props={session:{id:'A',title:'A'},has:()=>false}
   h.render(h.api.Inspector,props)
+  assert.match(jobs[0].url,/\/inspect-view\?id=A/)
   h.render(h.api.Inspector,{...props,session:{id:'B',title:'B'}})
   assert.equal(jobs[0].opts.signal.aborted,true)
   jobs[1].resolve(json(snapshot));await tick()
