@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-context-studio",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Context Studio for DeepSeek Harness: inspect AI-organized context paths, verify sources and derive session drafts from whole chains or selected nodes. · DSH上下文分支控制台：核对来源，选用整链或局部，预览后派生新会话草稿。",
   "repository": {
     "type": "git",

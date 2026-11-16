@@ -218,7 +218,7 @@ test('consoleGraph只按显式路径建前缀树，同卡不同前缀有独立�
   assert.deepEqual(value, before)
 })
 
-test('非法路径被忽略，旧报告保留真实shared边且不伪造路径，最多展示60条关联', t => {
+test('非法路径被忽略，旧报告保留真实shared关系且按需查看，不伪造路径', t => {
   const value = pathJob(), h = harness()
   value.report.paths = [null, { id: 'bad', title: '未知卡片', nodes: ['foreign'] },
     { id: 'cycle', title: '重复节点', nodes: ['g', 'g'] },
@@ -233,7 +233,10 @@ test('非法路径被忽略，旧报告保留真实shared边且不伪造路径�
   assert.equal(button(s.render(), '选用整条链').props.disabled, true)
   labelled(s.render(), '查看节点：共享引用的结论').props.onClick()
   assert.equal(nodes(s.render()).some(n => n.children?.includes('选用到这里')), false)
-  assert.ok(nodes(s.render()).some(n => n.type === 'path' && n.props.className?.includes('shared')))
+  assert.equal(nodes(s.render()).filter(n => n.props?.className === 'csx-line-relation').length, 0)
+  click(s.render(), '共同引用 · N04 待查疑点')
+  assert.match(text(labelled(s.render(), '连接详情')), /共同引用 · 不表示依赖/)
+  assert.equal(nodes(s.render()).filter(n => n.props?.['data-connection-kind'] === 'shared').length, 1)
   value.report.cards = Array.from({ length: 20 }, (_, i) => ({ id: 'c' + i, category: 'evidence', title: '材料' + i, body: '合成', evidence: [20] }))
   assert.equal(graphFor(h, value).data.links.length, 190)
   assert.equal(graphFor(h, value).graph.edges.length, 60)
@@ -444,19 +447,18 @@ test('派生记录按report/session隔离，回看只读；恢复仅选材且保
   assert.deepEqual(s.prepared[0].selection.instances, [instanceId(['g', 'r', 'd'])])
 })
 
-test('派生图回连所有选中实例，任意卡片集合不显示无依据的顺序箭头', t => {
+test('派生图仅打开trace时汇集所有选中实例，收起不改选材且不虚构顺序箭头', t => {
   const s = mountMap(t, pathJob())
   s.h.api.saveContextDraft(record({ cards: ['d', 'e'], instances: [instanceId(['g', 'r', 'd']), instanceId(['g', 'e'])] }))
-  const tree = s.render(), lines = nodes(tree).filter(n => n.type === 'path' && n.props.strokeDasharray === '4 5')
-  assert.equal(lines.length, 2)
-  const { graph } = graphFor(s.h, pathJob())
-  for (const trail of [['g', 'r', 'd'], ['g', 'e']]) {
-    const n = graph.nodes.find(n => n.id === instanceId(trail))
-    assert.ok(lines.some(line => line.props.d.startsWith('M' + (n.x + n.w) + ',' + (n.y + n.h / 2))))
-  }
-  labelled(tree, '图中派生草稿：已确认草稿').props.onClick()
+  const sourceLines = () => nodes(s.render()).filter(n => n.type === 'path' && n.props['data-source-bus'])
+  assert.equal(sourceLines().length, 0)
+  labelled(s.render(), '图中派生草稿：已确认草稿').props.onClick()
+  assert.ok(sourceLines().length > 0)
+  assert.deepEqual(nodes(s.render()).filter(n => n.props?.['data-instance-id'] && /\bcsx-line-origin\b/.test(n.props.className)).map(n => n.props['data-instance-id']), [['g', 'r', 'd'], ['g', 'e']].map(instanceId))
   const detail = text(labelled(s.render(), '地图节点详情'))
   assert.match(detail, /N02、N03/); assert.doesNotMatch(detail, /N02\s*→\s*N03/)
+  labelled(s.render(), '图中派生草稿：已确认草稿').props.onClick()
+  assert.equal(sourceLines().length, 0); assert.deepEqual(selected(s.render()), [])
   assert.deepEqual(s.prepared, [])
 })
 
