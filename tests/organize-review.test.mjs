@@ -58,7 +58,13 @@ async function fixture(t, config = {}) {
   const organizer = createOrganizer(deps), instances = [organizer]
   const fileFor = id => join(dataDir, 'organize', id.split('.')[0], `${id}.json`)
   async function saved(id, status) {
-    return until(async () => { try { return JSON.parse(await fs.readFile(fileFor(id), 'utf8')) } catch { return null } }, v => v?.status === status)
+    // Follow the public settling state before opening the file. Polling the
+    // destination during rename can itself obstruct an atomic save on Windows.
+    const result = await until(() => organizer.get({ id, sessionId: 'review-session' }), r => r.job.status === status)
+    assert.equal(result.job.persistenceWarning, undefined)
+    const stored = JSON.parse(await fs.readFile(fileFor(id), 'utf8'))
+    assert.equal(stored.status, status)
+    return stored
   }
   t.after(async () => {
     for (const instance of instances) instance.dispose()

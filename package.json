@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-context-studio",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Context Studio for DeepSeek Harness: opt-in AI conversation briefs, evidence-linked recommendations, raw context tracing and selected-context drafts. · DSH 上下文调试：主动确认的会话整理、来源可查的建议、原始上下文追溯与精选分支草稿。",
   "repository": {
     "type": "git",

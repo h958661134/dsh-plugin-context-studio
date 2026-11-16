@@ -5,7 +5,7 @@
 **把长会话整理成可读简报。带着疑点核对原文，带着证据重新开始。**
 
 [![release](https://img.shields.io/github/v/release/h958661134/dsh-plugin-context-studio?label=release&color=397d79)](https://github.com/h958661134/dsh-plugin-context-studio/releases)
-[![tests](https://img.shields.io/badge/tests-284%20passed-397d79)](docs/REVIEW-1.5.md)
+[![tests](https://img.shields.io/badge/tests-291%20passed-397d79)](docs/REVIEW-1.5.1.md)
 [![DSH](https://img.shields.io/badge/DSH-0.2.x-334155)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-339933)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -14,7 +14,7 @@
 
 </div>
 
-当前本地版本为 **v1.5.0，尚未推送或发布**。Release 徽章指向已公开版本。默认进入“会话整理”，原有图保留在“原始记录”；原有文件、备份、草稿和操作日志保留。整理流程截图来自隔离 DSH 实际界面，**内容和用量由不联网的测试适配器模拟**，用于验证交互，不代表真实模型分析质量或收费。
+当前本地版本为 **v1.5.1，尚未推送或发布**。本次修复 OpenCode 整理缺少会话路由标识的问题，并提供可排查的安全错误分类。Release 徽章指向已公开版本。默认进入“会话整理”，原有图保留在“原始记录”；原有文件、备份、草稿和操作日志保留。界面沿用 v1.5，整理流程截图来自隔离 DSH 实际界面，**内容和用量由不联网的测试适配器模拟**，用于验证交互，不代表真实模型分析质量或收费。
 
 ## 它能帮你找到什么
 
@@ -123,8 +123,10 @@ DSH_HOME=/tmp/context-studio-try dsh --profile web --no-open --port 4001
 | 判断错误 | 提供核对线索，不把相关性说成内部因果，不自动修改记忆 |
 | 模型整理 | 用户预览并确认后，把所列文本交给所选 DSH 模型供应商；不接收密钥 |
 | 整理权限 | 一次辅助生成，无工具执行，不向原会话发消息，不修改项目文件或 memory |
+| OpenCode 路由 | 由 DSH 适配器携带独立的整理会话标识，同一来源会话保持稳定；不创建原生会话或注入额外历史 |
 | 防止重复消耗 | 派发前持久化唯一凭据；同计划最多发起一次宿主生成调用，本插件不自动重试 |
 | 取消与故障 | 请求停止，保留已知用量；保存失败保留内存结果并提示复制，费用可能未知 |
+| 错误诊断 | 只保存固定错误分类、调用阶段与有限状态信息；不回显供应商原始错误、请求头或密钥 |
 | 报告保存 | 报告和本次来源片段另存本机插件数据目录，不替换原始日志 |
 | 创建分支 | 所选内容存在本机浏览器；确认后只预填，不调用模型、不自动发送 |
 | 升级旧版 | 不删除旧草稿、日志和备份；历史撤销保留，冲突时拒绝覆盖 |
@@ -141,6 +143,12 @@ DSH_HOME=/tmp/context-studio-try dsh --profile web --no-open --port 4001
 **整理读完了整段会话吗？**
 
 不一定。先确定回答边界，再按预算选取可见文本，最多80条来源、每条最多8,000字符，默认优先目标、约束与项目约定，实际覆盖明确显示。未纳入的内容不代表已经分析；待回复的最新输入可能在最近回答之后，应先核对范围。
+
+**普通会话能用，为什么“整理”却失败？**
+
+v1.5 的辅助调用没有携带会话路由标识，会导致 OpenCode Go 缺少必需的 `x-opencode-session`。v1.5.1 对 `opencode-go` / `opencode` 使用稳定的独立整理标识，由 DSH 自身适配器生成请求头；其他供应商调用保持原样。[OpenCode 的会话要求](https://opencode.ai/docs/console/harnesses)
+
+升级后完全退出 DSH（包括托盘）再打开。旧失败记录不会重跑或改变；如果决定再试，需**重新预览并确认消耗**。新失败会显示如 `AUTH`（权限）、`RATE_LIMIT`（限流）、`INVALID_REQUEST`（参数）等分类，作业文件还会区分模型准备、流响应和报告解析阶段。旧版仅保存通用错误时，无法从旧记录恢复供应商原始原因。即使用量显示0，也不能据此确认未收费。
 
 **整理费用怎么算？**
 
@@ -183,8 +191,8 @@ client.js：会话整理 / 原始记录 → 核对来源 → 新分支草稿
   │ 同源 HTTP；uiWorkspace.startSession 只预填
   ▼
 host.js
-  ├─ organize.js       有预算的快照、报告与流白名单
-  ├─ organize-jobs.js  预览确认、唯一凭据、一次调用、取消与保存
+  ├─ organize.js       有预算的快照、报告与流白名单、安全错误分类
+  ├─ organize-jobs.js  预览确认、唯一凭据、调用路由、取消与诊断保存
   ├─ reads.js          会话导航、读取去重与截止
   ├─ context-view.js   历史位置索引、有限缓存、原文分页
   ├─ context-flow.js   回答间变化、真实图关系、排查线索
@@ -216,7 +224,7 @@ npm test
 npm pack --dry-run
 ```
 
-本地 v1.5：**284/284 测试通过，0 跳过、0 TODO**，验收结果见 [工程校验](docs/REVIEW-1.5.md)。整理生成使用不联网的测试适配器，未消耗用户真实 token；真实模型质量和原生桌面仍需实际使用验证。
+本地 v1.5.1：**291/291 测试通过，0 跳过、0 TODO**。本次故障定位与安装版适配器的本机协议测试见 [修复校验](docs/REVIEW-1.5.1.md)，现有界面验收见 [v1.5 工程校验](docs/REVIEW-1.5.md)。未调用真实模型、未消耗用户真实 token；真实供应商服务和简报质量仍需用户明确确认后验证。
 
 测试使用 `node:test`、合成日志、客户端 VM、假 LLM 与本地 HTTP；真实 UI 仅在独立 `DSH_HOME` 的4001端口验收。模拟生成不能证明供应商实际收费或整理质量，隔离浏览器通过不等于所有原生桌面版本已验收。
 
